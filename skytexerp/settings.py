@@ -7,7 +7,12 @@ SECRET_KEY = 'django-insecure-your-secret-key-here'
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost',
+'127.0.0.1',
+'asgroupbd.com',
+        'skytex.asgroupbd.com',
+    'www.skytex.asgroupbd.com',
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
