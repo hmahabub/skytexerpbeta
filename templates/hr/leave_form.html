@@ -1,0 +1,104 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Apply for Leave - SkyTex ERP{% endblock %}
+
+{% block page_title %}Apply for Leave{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="stat-card">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <h6>Please fix the following errors:</h6>
+                            <ul class="mb-0">
+                                {% for field, errors in form.errors.items %}
+                                    <li>{{ field }}: {{ errors|join:", " }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Employee *</label>
+                        {{ form.employee }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Leave Type *</label>
+                        {{ form.leave_type }}
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Start Date *</label>
+                                {{ form.start_date }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">End Date *</label>
+                                {{ form.end_date }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Reason *</label>
+                        {{ form.reason }}
+                    </div>
+                    
+                    <div class="mt-4 border-top pt-3">
+                        <button type="submit" class="btn btn-gradient">
+                            <i class="fas fa-paper-plane"></i> Submit Request
+                        </button>
+                        <a href="{% url 'hr:leave_requests' %}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="stat-card mt-3">
+                <h6>Leave Policy</h6>
+                <ul class="text-muted small">
+                    <li>Annual Leave: 14 days per year</li>
+                    <li>Sick Leave: 10 days per year</li>
+                    <li>Casual Leave: 5 days per year</li>
+                    <li>Maternity Leave: 120 days</li>
+                    <li>Paternity Leave: 10 days</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Calculate days when dates change
+        const startDate = document.getElementById('id_start_date');
+        const endDate = document.getElementById('id_end_date');
+        
+        function calculateDays() {
+            if (startDate.value && endDate.value) {
+                const start = new Date(startDate.value);
+                const end = new Date(endDate.value);
+                const diffTime = Math.abs(end - start);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                // You can display this somewhere
+            }
+        }
+        
+        startDate.addEventListener('change', calculateDays);
+        endDate.addEventListener('change', calculateDays);
+    });
+</script>
+{% endblock %}
