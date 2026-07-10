@@ -8,7 +8,7 @@
 {% block content %}
 <div class="container-fluid">
     <div class="row justify-content-center">
-        <div class="col-md-11">
+        <div class="col-md-12">
             <div class="stat-card">
                 <h5 class="mb-3">Review &amp; Confirm Payroll - {{ month }}/{{ year }}</h5>
 
@@ -20,7 +20,16 @@
                     Salary amounts below are pulled from each employee's default pay (basic + house rent +
                     medical + transport). Edit the amount if needed.
                     {% endif %}
-                    If you change an amount, please add a short note explaining the increase or deduction.
+                    If you change the salary amount, please add a short note explaining the increase or deduction.
+                </div>
+
+                <div class="alert alert-secondary">
+                    <i class="fas fa-calendar-check"></i>
+                    <strong>Attendance &amp; leave are synced automatically.</strong>
+                    Days are pulled from Attendance records. Any day covered by an <strong>approved</strong> leave
+                    is treated as paid leave (not absent); any day with no attendance record and no approved leave
+                    is an unexcused absence. The <strong>Absence Deduction</strong>, <strong>Overtime Amount</strong>,
+                    and <strong>Bonus</strong> columns are pre-filled from this and can be edited before confirming.
                 </div>
 
                 {% if existing_count %}
@@ -40,37 +49,57 @@
                         <table class="table table-bordered align-middle">
                             <thead>
                                 <tr>
-                                    <th>Employee ID</th>
-                                    <th>Name</th>
-                                    <th>Department</th>
-                                    <th>Basic</th>
-                                    <th>House Rent</th>
-                                    <th>Medical</th>
-                                    <th>Transport</th>
+                                    <th>Employee</th>
+                                    <th>Dept</th>
                                     <th>Default Salary<br><small class="text-muted fw-normal">(Basic+HR+Medical+Transport)</small></th>
-                                    <th style="min-width: 160px;">Salary Amount *</th>
-                                    <th style="min-width: 220px;">Note (required if amount changed)</th>
+                                    <th>Attendance<br><small class="text-muted fw-normal">(Present / Absent / Paid Leave)</small></th>
+                                    <th>OT Hours</th>
+                                    <th style="min-width: 150px;">Salary Amount *</th>
+                                    <th style="min-width: 140px;">Absence Deduction</th>
+                                    <th style="min-width: 140px;">Overtime Amount</th>
+                                    <th style="min-width: 120px;">Bonus</th>
+                                    <th style="min-width: 200px;">Note</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for row in employee_rows %}
                                 <tr>
                                     <td>
-                                        {{ row.employee.employee_id }}
+                                        {{ row.employee.full_name }}<br>
+                                        <small class="text-muted">{{ row.employee.employee_id }}</small>
                                         <input type="hidden" name="employee_id" value="{{ row.employee.id }}">
                                     </td>
-                                    <td>{{ row.employee.full_name }}</td>
                                     <td>{{ row.employee.department.name|default:"-" }}</td>
-                                    <td>{{ row.basic_salary }}</td>
-                                    <td>{{ row.house_rent }}</td>
-                                    <td>{{ row.medical_allowance }}</td>
-                                    <td>{{ row.transport_allowance }}</td>
                                     <td><strong>{{ row.default_salary }}</strong></td>
+                                    <td>
+                                        <span class="badge bg-success">{{ row.attendance.days_present }}P</span>
+                                        <span class="badge bg-danger">{{ row.attendance.days_absent }}A</span>
+                                        <span class="badge bg-info">{{ row.attendance.days_paid_leave }}L</span>
+                                        {% if row.attendance.days_unpaid_leave %}
+                                        <span class="badge bg-secondary">{{ row.attendance.days_unpaid_leave }}UL</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.attendance.total_overtime_hours|default:"0" }}</td>
                                     <td>
                                         <input type="number" step="0.01" class="form-control salary-input"
                                                name="salary_{{ row.employee.id }}"
                                                data-default="{{ row.default_salary }}"
                                                value="{{ row.entered_salary|default:row.default_salary }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control"
+                                               name="absence_deduction_{{ row.employee.id }}"
+                                               value="{{ row.absence_deduction }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control"
+                                               name="overtime_amount_{{ row.employee.id }}"
+                                               value="{{ row.overtime_amount }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" class="form-control"
+                                               name="bonus_{{ row.employee.id }}"
+                                               value="{{ row.bonus|default:'0' }}">
                                     </td>
                                     <td>
                                         <textarea class="form-control" rows="1"

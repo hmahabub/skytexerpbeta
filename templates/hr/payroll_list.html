@@ -68,6 +68,9 @@
                         <th>Department</th>
                         <th>Month/Year</th>
                         <th>Basic Pay</th>
+                        <th>Attendance<br><small class="text-muted fw-normal">(Present/Absent)</small></th>
+                        <th>Overtime</th>
+                        <th>Bonus</th>
                         <th>Earnings</th>
                         <th>Deductions</th>
                         <th>Net Payable</th>
@@ -85,6 +88,12 @@
                         <td>{{ payroll.employee.department.name|default:"-" }}</td>
                         <td>{{ payroll.month }}/{{ payroll.year }}</td>
                         <td>{{ payroll.basic_pay|floatformat:2 }}</td>
+                        <td>
+                            <span class="badge bg-success">{{ payroll.days_present }}P</span>
+                            <span class="badge bg-danger">{{ payroll.days_absent }}A</span>
+                        </td>
+                        <td>{{ payroll.overtime_amount|floatformat:2 }}</td>
+                        <td>{{ payroll.bonus|floatformat:2 }}</td>
                         <td>{{ payroll.total_earnings|floatformat:2 }}</td>
                         <td>{{ payroll.total_deductions|floatformat:2 }}</td>
                         <td><strong>{{ payroll.net_payable|floatformat:2 }}</strong></td>
@@ -96,7 +105,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center py-4">
+                        <td colspan="11" class="text-center py-4">
                             <i class="fas fa-file-invoice fa-3x text-muted mb-3 d-block"></i>
                             <p class="text-muted">No payroll records found</p>
                             <a href="{% url 'hr:generate_payroll' %}" class="btn btn-gradient btn-sm">

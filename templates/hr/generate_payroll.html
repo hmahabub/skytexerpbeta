@@ -15,8 +15,10 @@
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i>
                     This will generate payroll for all active employees for the selected month, using each
-                    employee's default salary (basic + house rent + medical + transport). You'll get a chance
-                    to review and edit amounts before anything is saved.
+                    employee's default salary (basic + house rent + medical + transport). Days absent
+                    without an approved leave are automatically deducted, and overtime/bonus can be added,
+                    all on the next screen. You'll get a chance to review and edit everything before anything
+                    is saved.
                 </div>
 
                 <form method="post" enctype="multipart/form-data">
@@ -72,8 +74,10 @@
 
                     <h6 class="mb-2"><i class="fas fa-file-excel"></i> Or use Excel</h6>
                     <p class="text-muted small mb-3">
-                        Download a spreadsheet pre-filled with every active employee's default salary for the
-                        month/year selected above. Edit the "Salary Amount" and "Note" columns, then upload it
+                        Download a spreadsheet pre-filled with every active employee's default salary,
+                        attendance summary (present/absent/paid leave), and suggested absence deduction
+                        and overtime amount for the month/year selected above. Edit the "Salary Amount",
+                        "Absence Deduction", "Overtime Amount", "Bonus", and "Note" columns, then upload it
                         here to review and confirm.
                     </p>
 

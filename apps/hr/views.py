@@ -20,6 +20,104 @@ from .forms import EmployeeForm, AttendanceForm, LeaveForm, PayrollForm, Product
 def is_hr_or_admin(user):
     return user.is_superuser or user.groups.filter(name='HR').exists()
 
+
+def get_attendance_summary(employee, month, year):
+    """Build a day-by-day attendance picture for one employee/month,
+    reconciling Attendance records with approved Leave so payroll and
+    leave stay in sync:
+
+    - A day with an approved (paid) leave covering it -> paid leave day,
+      never counted as absent, even if no Attendance row exists or it
+      was previously marked 'absent'.
+    - A day with an approved *unpaid* leave covering it -> unpaid leave
+      day, which (like an absence) attracts a payroll deduction.
+    - A day with no Attendance row and no approved leave -> unexcused
+      absence (per company policy: "if no leave is approved, the day
+      counts as absent").
+    - Future days within the month are not yet counted either way.
+    """
+    days_in_month = monthrange(year, month)[1]
+    first_day = date(year, month, 1)
+    last_day = date(year, month, days_in_month)
+    today = date.today()
+    last_countable_day = min(last_day, today)
+
+    attendance_by_date = {
+        a.date: a for a in Attendance.objects.filter(
+            employee=employee, date__range=(first_day, last_day)
+        )
+    }
+
+    leave_by_date = {}
+    approved_leaves = Leave.objects.filter(
+        employee=employee, status='approved',
+        start_date__lte=last_day, end_date__gte=first_day,
+    )
+    for leave in approved_leaves:
+        d = max(leave.start_date, first_day)
+        end = min(leave.end_date, last_day)
+        while d <= end:
+            leave_by_date[d] = leave
+            d += timedelta(days=1)
+
+    days_present = 0
+    days_late = 0
+    days_half_day = 0
+    days_paid_leave = 0
+    days_unpaid_leave = 0
+    days_absent = 0
+    total_overtime_hours = Decimal('0')
+
+    d = first_day
+    while d <= last_countable_day:
+        attendance = attendance_by_date.get(d)
+        leave = leave_by_date.get(d)
+
+        if attendance:
+            total_overtime_hours += attendance.overtime_hours or 0
+
+        if leave is not None:
+            # An approved leave covering this day always wins - that's
+            # the leave/payroll sync the policy requires.
+            if leave.is_paid:
+                days_paid_leave += 1
+            else:
+                days_unpaid_leave += 1
+        elif attendance:
+            if attendance.status == 'present':
+                days_present += 1
+            elif attendance.status == 'late':
+                days_present += 1
+                days_late += 1
+            elif attendance.status == 'half_day':
+                days_half_day += 1
+            elif attendance.status == 'holiday':
+                pass
+            elif attendance.status == 'leave':
+                # Marked as leave but no matching approved Leave record
+                # (e.g. it was later rejected/cancelled) - treat as absent.
+                days_absent += 1
+            else:  # 'absent'
+                days_absent += 1
+        else:
+            # No attendance recorded and no approved leave -> absent.
+            days_absent += 1
+
+        d += timedelta(days=1)
+
+    return {
+        'days_in_month': days_in_month,
+        'days_present': days_present,
+        'days_late': days_late,
+        'days_half_day': days_half_day,
+        'days_paid_leave': days_paid_leave,
+        'days_unpaid_leave': days_unpaid_leave,
+        'days_absent': days_absent,
+        'deduction_days': days_absent + days_unpaid_leave,
+        'total_overtime_hours': total_overtime_hours,
+    }
+
+
 @login_required
 def hr_dashboard(request):
     """HR Dashboard Overview"""
@@ -226,7 +324,7 @@ def delete_employee(request, pk):
         employee.is_active = False
         employee.save()
         messages.success(request, f'Employee {employee.full_name} deactivated successfully!')
-        return redirect('employee_list')
+        return redirect('hr:employee_list')
     
     context = {
         'employee': employee,
@@ -249,7 +347,7 @@ def attendance_view(request):
             attendance.marked_by = request.user
             attendance.save()
             messages.success(request, 'Attendance marked successfully!')
-            return redirect('attendance_view')
+            return redirect('hr:attendance_view')
     else:
         form = AttendanceForm(initial={'date': date_filter})
     
@@ -289,7 +387,7 @@ def bulk_attendance(request):
                     attendance.save()
             
             messages.success(request, f'Bulk attendance marked for {employees.count()} employees!')
-            return redirect('attendance_view')
+            return redirect('hr:attendance_view')
     else:
         form = BulkAttendanceForm()
     
@@ -330,11 +428,19 @@ def apply_leave(request):
             return redirect('hr:leave_requests')
     else:
         form = LeaveForm()
-    
+
+    current_year = date.today().year
+    employee_balances = {
+        str(emp.id): emp.leave_balance(current_year)
+        for emp in Employee.objects.filter(is_active=True)
+    }
+
     context = {
         'active': 'hr',
         'page_title': 'Apply for Leave',
         'form': form,
+        'employee_balances_json': json.dumps(employee_balances),
+        'current_year': current_year,
     }
     return render(request, 'hr/leave_form.html', context)
 
@@ -349,15 +455,40 @@ def approve_leave(request, pk):
             leave.status = 'approved'
             leave.approved_by = request.user
             leave.approved_date = date.today()
-            messages.success(request, 'Leave approved successfully!')
+            leave.save()
+
+            # Sync attendance for the leave period so payroll never
+            # counts these days as unexcused absences.
+            tag = f'leave#{leave.pk}'
+            d = leave.start_date
+            while d <= leave.end_date:
+                Attendance.objects.update_or_create(
+                    employee=leave.employee, date=d,
+                    defaults={
+                        'status': 'leave',
+                        'remarks': f'On approved {leave.get_leave_type_display()} ({tag})',
+                        'marked_by': request.user,
+                    }
+                )
+                d += timedelta(days=1)
+            messages.success(request, 'Leave approved successfully! Attendance has been updated for the leave period.')
         elif action == 'reject':
+            tag = f'leave#{leave.pk}'
             leave.status = 'rejected'
+            leave.save()
+            # If attendance was already synced to 'leave' for this
+            # request (e.g. previously approved, now being corrected),
+            # revert those days back to absent.
+            Attendance.objects.filter(
+                employee=leave.employee, date__range=(leave.start_date, leave.end_date),
+                status='leave', remarks__icontains=f'({tag})'
+            ).update(status='absent', remarks='Leave request rejected')
             messages.warning(request, 'Leave rejected!')
-        leave.save()
         return redirect('hr:leave_requests')
     
     context = {
         'leave': leave,
+        'balance': leave.employee.leave_balance(leave.start_date.year).get(leave.leave_type),
     }
     return render(request, 'hr/approve_leave.html', context)
 
@@ -399,11 +530,17 @@ def generate_payroll(request):
     1. HR picks month/year.
     2. Every active employee is listed with their default salary
        (basic + house rent + medical + transport, taken straight from
-       the Employee record). HR can edit the amount for anyone.
-    3. On confirm, payroll records are created. If the entered amount
-       differs from the default, the difference is recorded as an
-       incentive (increase) or deduction (decrease) along with the note
-       HR wrote explaining why.
+       the Employee record), plus attendance pulled from Attendance/Leave
+       records: days present, days on approved (paid) leave, and days
+       absent. Any day with no attendance record and no approved leave
+       counts as an unexcused absence and is pre-filled as a deduction.
+       Overtime (from logged overtime hours) and a bonus field are also
+       editable here. HR can edit any of these before confirming.
+    3. On confirm, payroll records are created. If the entered base
+       salary amount differs from the default, the difference is
+       recorded as an incentive (increase) or deduction (decrease) along
+       with the note HR wrote explaining why; absence deduction, overtime
+       amount, and bonus are stored as entered.
     """
     current_year = date.today().year
     oldest_year = Payroll.objects.order_by('year').values_list('year', flat=True).first()
@@ -419,6 +556,13 @@ def generate_payroll(request):
         year = int(request.POST.get('year'))
         employee_ids = request.POST.getlist('employee_id')
 
+        def _decimal(field_name, default):
+            raw = request.POST.get(field_name, '').strip()
+            try:
+                return Decimal(raw) if raw else default
+            except Exception:
+                return default
+
         saved_count = 0
         for emp_id in employee_ids:
             employee = get_object_or_404(Employee, pk=emp_id)
@@ -428,11 +572,18 @@ def generate_payroll(request):
                 employee.medical_allowance + employee.transport_allowance
             )
 
-            raw_amount = request.POST.get(f'salary_{emp_id}', '').strip()
-            try:
-                salary_amount = Decimal(raw_amount) if raw_amount else default_salary
-            except Exception:
-                salary_amount = default_salary
+            # Recompute attendance/leave for the month fresh from the
+            # source records - this is what keeps payroll and leave in
+            # sync, rather than trusting whatever was last rendered.
+            summary = get_attendance_summary(employee, month, year)
+            per_day_rate = (default_salary / summary['days_in_month']) if summary['days_in_month'] else Decimal('0')
+            suggested_absence_deduction = (per_day_rate * summary['deduction_days']).quantize(Decimal('0.01'))
+            suggested_overtime_amount = (employee.overtime_hourly_rate * summary['total_overtime_hours']).quantize(Decimal('0.01'))
+
+            salary_amount = _decimal(f'salary_{emp_id}', default_salary)
+            absence_deduction = _decimal(f'absence_deduction_{emp_id}', suggested_absence_deduction)
+            overtime_amount = _decimal(f'overtime_amount_{emp_id}', suggested_overtime_amount)
+            bonus = _decimal(f'bonus_{emp_id}', Decimal('0'))
 
             remarks = request.POST.get(f'remarks_{emp_id}', '').strip()
             difference = salary_amount - default_salary
@@ -451,6 +602,14 @@ def generate_payroll(request):
                     'transport_allowance': employee.transport_allowance,
                     'incentives': incentives,
                     'other_deductions': other_deductions,
+                    'overtime_amount': overtime_amount,
+                    'bonus': bonus,
+                    'absence_deduction': absence_deduction,
+                    'total_working_days': summary['days_in_month'],
+                    'days_present': summary['days_present'],
+                    'days_absent': summary['deduction_days'],
+                    'days_late': summary['days_late'],
+                    'total_overtime_hours': summary['total_overtime_hours'],
                     'remarks': remarks,
                     'status': 'processed',
                     'generated_by': request.user,
@@ -476,6 +635,11 @@ def generate_payroll(request):
                 employee.basic_salary + employee.house_rent +
                 employee.medical_allowance + employee.transport_allowance
             )
+            summary = get_attendance_summary(employee, month, year)
+            per_day_rate = (default_salary / summary['days_in_month']) if summary['days_in_month'] else Decimal('0')
+            suggested_absence_deduction = (per_day_rate * summary['deduction_days']).quantize(Decimal('0.01'))
+            suggested_overtime_amount = (employee.overtime_hourly_rate * summary['total_overtime_hours']).quantize(Decimal('0.01'))
+
             employee_rows.append({
                 'employee': employee,
                 'basic_salary': employee.basic_salary,
@@ -483,6 +647,10 @@ def generate_payroll(request):
                 'medical_allowance': employee.medical_allowance,
                 'transport_allowance': employee.transport_allowance,
                 'default_salary': default_salary,
+                'attendance': summary,
+                'absence_deduction': suggested_absence_deduction,
+                'overtime_amount': suggested_overtime_amount,
+                'bonus': Decimal('0'),
             })
 
         # Warn if payroll already exists for this month/year (will be overwritten)
@@ -511,8 +679,10 @@ def generate_payroll(request):
 @user_passes_test(is_hr_or_admin)
 def download_payroll_template(request):
     """Download an Excel template pre-filled with every active employee's
-    default salary breakdown for the chosen month/year. HR edits the
-    'Salary Amount' and 'Note' columns and re-uploads the file."""
+    default salary breakdown, attendance-based absence deduction, and
+    suggested overtime for the chosen month/year. HR edits the
+    'Salary Amount', 'Absence Deduction', 'Overtime Amount', 'Bonus' and
+    'Note' columns and re-uploads the file."""
     month = request.GET.get('month', '')
     year = request.GET.get('year', '')
 
@@ -521,7 +691,10 @@ def download_payroll_template(request):
     sheet.title = 'Payroll'
 
     headers = ['Employee ID', 'Name', 'Department', 'Basic', 'House Rent',
-               'Medical', 'Transport', 'Default Salary', 'Salary Amount', 'Note']
+               'Medical', 'Transport', 'Default Salary', 'Days Present',
+               'Days Absent (incl. unpaid leave)', 'Days Paid Leave',
+               'Suggested Absence Deduction', 'Salary Amount',
+               'Absence Deduction', 'Overtime Amount', 'Bonus', 'Note']
     sheet.append(headers)
 
     header_font = Font(bold=True, color='FFFFFF')
@@ -533,11 +706,28 @@ def download_payroll_template(request):
         cell.alignment = Alignment(horizontal='center')
 
     employees = Employee.objects.filter(is_active=True).select_related('department').order_by('employee_id')
+    try:
+        month_int = int(month)
+        year_int = int(year)
+    except (TypeError, ValueError):
+        month_int = year_int = None
+
     for employee in employees:
         default_salary = (
             employee.basic_salary + employee.house_rent +
             employee.medical_allowance + employee.transport_allowance
         )
+
+        if month_int and year_int:
+            summary = get_attendance_summary(employee, month_int, year_int)
+            per_day_rate = (default_salary / summary['days_in_month']) if summary['days_in_month'] else Decimal('0')
+            suggested_absence_deduction = (per_day_rate * summary['deduction_days']).quantize(Decimal('0.01'))
+            suggested_overtime_amount = (employee.overtime_hourly_rate * summary['total_overtime_hours']).quantize(Decimal('0.01'))
+        else:
+            summary = {'days_present': 0, 'deduction_days': 0, 'days_paid_leave': 0}
+            suggested_absence_deduction = Decimal('0')
+            suggested_overtime_amount = Decimal('0')
+
         sheet.append([
             employee.employee_id,
             employee.full_name,
@@ -547,22 +737,34 @@ def download_payroll_template(request):
             float(employee.medical_allowance),
             float(employee.transport_allowance),
             float(default_salary),
+            summary['days_present'],
+            summary['deduction_days'],
+            summary['days_paid_leave'],
+            float(suggested_absence_deduction),
             float(default_salary),
+            float(suggested_absence_deduction),
+            float(suggested_overtime_amount),
+            0,
             '',
         ])
 
-    widths = {'A': 14, 'B': 25, 'C': 18, 'D': 12, 'E': 12, 'F': 12, 'G': 12, 'H': 15, 'I': 15, 'J': 35}
+    widths = {'A': 14, 'B': 22, 'C': 16, 'D': 10, 'E': 10, 'F': 10, 'G': 10,
+              'H': 13, 'I': 11, 'J': 13, 'K': 11, 'L': 13, 'M': 13, 'N': 14,
+              'O': 14, 'P': 10, 'Q': 32}
     for col, width in widths.items():
         sheet.column_dimensions[col].width = width
 
     # Lock the calculated/reference columns so HR can't accidentally edit them,
-    # while leaving Salary Amount (I) and Note (J) open for editing.
+    # while leaving Salary Amount, Absence Deduction, Overtime Amount,
+    # Bonus, and Note open for editing.
     sheet.protection.sheet = True
     sheet.protection.password = ''
+    locked_cols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+    editable_cols = ['M', 'N', 'O', 'P', 'Q']
     for row_num in range(1, sheet.max_row + 1):
-        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+        for col_letter in locked_cols:
             sheet[f'{col_letter}{row_num}'].protection = sheet[f'{col_letter}{row_num}'].protection.copy(locked=True)
-        for col_letter in ['I', 'J']:
+        for col_letter in editable_cols:
             sheet[f'{col_letter}{row_num}'].protection = sheet[f'{col_letter}{row_num}'].protection.copy(locked=False)
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -624,21 +826,33 @@ def upload_payroll_excel(request):
             skipped_ids.append(employee_id)
             continue
 
-        # Always recompute the default from the live Employee record -
-        # never trust the breakdown columns in the uploaded file, only the
-        # employee_id, the Salary Amount column, and the Note column.
+        # Always recompute the default and attendance summary from the
+        # live Employee/Attendance/Leave records - never trust the
+        # reference/breakdown columns in the uploaded file, only the
+        # employee_id and the editable Salary Amount / Absence Deduction /
+        # Overtime Amount / Bonus / Note columns.
         default_salary = (
             employee.basic_salary + employee.house_rent +
             employee.medical_allowance + employee.transport_allowance
         )
+        summary = get_attendance_summary(employee, month, year)
+        per_day_rate = (default_salary / summary['days_in_month']) if summary['days_in_month'] else Decimal('0')
+        suggested_absence_deduction = (per_day_rate * summary['deduction_days']).quantize(Decimal('0.01'))
+        suggested_overtime_amount = (employee.overtime_hourly_rate * summary['total_overtime_hours']).quantize(Decimal('0.01'))
 
-        raw_amount = row[8] if len(row) > 8 else None
-        try:
-            entered_salary = Decimal(str(raw_amount)) if raw_amount not in (None, '') else default_salary
-        except Exception:
-            entered_salary = default_salary
+        def _cell_decimal(index, default):
+            value = row[index] if len(row) > index else None
+            try:
+                return Decimal(str(value)) if value not in (None, '') else default
+            except Exception:
+                return default
 
-        remarks = str(row[9]).strip() if len(row) > 9 and row[9] not in (None, '') else ''
+        entered_salary = _cell_decimal(12, default_salary)
+        entered_absence_deduction = _cell_decimal(13, suggested_absence_deduction)
+        entered_overtime_amount = _cell_decimal(14, suggested_overtime_amount)
+        entered_bonus = _cell_decimal(15, Decimal('0'))
+
+        remarks = str(row[16]).strip() if len(row) > 16 and row[16] not in (None, '') else ''
 
         employee_rows.append({
             'employee': employee,
@@ -648,6 +862,10 @@ def upload_payroll_excel(request):
             'transport_allowance': employee.transport_allowance,
             'default_salary': default_salary,
             'entered_salary': entered_salary,
+            'attendance': summary,
+            'absence_deduction': entered_absence_deduction,
+            'overtime_amount': entered_overtime_amount,
+            'bonus': entered_bonus,
             'remarks': remarks,
         })
 

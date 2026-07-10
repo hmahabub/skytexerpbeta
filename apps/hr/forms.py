@@ -73,13 +73,14 @@ class LeaveForm(forms.ModelForm):
         cleaned_data = super().clean()
         start_date = cleaned_data.get('start_date')
         end_date = cleaned_data.get('end_date')
-        
+        employee = cleaned_data.get('employee')
+        leave_type = cleaned_data.get('leave_type')
+
         if start_date and end_date:
             if start_date > end_date:
                 raise forms.ValidationError('End date must be after start date')
             
             # Check for overlapping leaves
-            employee = cleaned_data.get('employee')
             if employee:
                 overlapping = Leave.objects.filter(
                     employee=employee,
@@ -92,6 +93,24 @@ class LeaveForm(forms.ModelForm):
                 
                 if overlapping.exists():
                     raise forms.ValidationError('Employee already has a leave request for this period')
+
+            # Check the employee's remaining balance for quota-tracked
+            # leave types (annual, sick, casual, maternity, paternity).
+            # Unpaid leave has no quota and is always allowed.
+            if employee and leave_type:
+                requested_days = (end_date - start_date).days + 1
+                remaining = Leave.remaining_balance(
+                    employee, leave_type, start_date.year,
+                    exclude_pk=self.instance.pk if self.instance and self.instance.pk else None
+                )
+                if remaining is not None and requested_days > remaining:
+                    leave_type_label = dict(Leave.LEAVE_TYPES).get(leave_type, leave_type)
+                    raise forms.ValidationError(
+                        f'Insufficient {leave_type_label} balance for {start_date.year}: '
+                        f'{remaining} day(s) remaining, but {requested_days} day(s) requested.'
+                    )
+
+        return cleaned_data
 
 class PayrollForm(forms.ModelForm):
     class Meta:

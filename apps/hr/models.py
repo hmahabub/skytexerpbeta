@@ -105,7 +105,7 @@ class Employee(models.Model):
     bank_account_no = models.CharField(max_length=50, blank=True)
     pf_account_no = models.CharField(max_length=50, blank=True)
     
-    # Documents
+    # Documents  
     profile_picture = models.ImageField(upload_to='employee_profiles/', null=True, blank=True)
     resume = models.FileField(upload_to='employee_resumes/', null=True, blank=True)
     
@@ -131,7 +131,37 @@ class Employee(models.Model):
     @property
     def total_salary(self):
         return self.basic_salary + self.house_rent + self.medical_allowance + self.transport_allowance
-    
+
+    @property
+    def ordinary_hourly_rate(self):
+        """Standard hourly rate derived from gross monthly salary, based on
+        a 26-day / 8-hour standard month (208 hours) commonly used for
+        garment-sector payroll in Bangladesh."""
+        if self.total_salary:
+            return self.total_salary / Decimal('208')
+        return Decimal('0')
+
+    @property
+    def overtime_hourly_rate(self):
+        """Overtime is paid at double the ordinary hourly rate."""
+        return self.ordinary_hourly_rate * Decimal('2')
+
+    def leave_balance(self, year=None):
+        """Returns {leave_type: {entitled, used, remaining}} for every
+        leave type that carries an annual quota (see Leave.LEAVE_ANNUAL_QUOTA).
+        Used for showing balances on the leave application form and for
+        validating new leave requests."""
+        year = year or date.today().year
+        balance = {}
+        for leave_type, quota in Leave.LEAVE_ANNUAL_QUOTA.items():
+            used = Leave.days_used(self, leave_type, year)
+            balance[leave_type] = {
+                'entitled': quota,
+                'used': used,
+                'remaining': max(quota - used, 0),
+            }
+        return balance
+
     def save(self, *args, **kwargs):
         if not self.employee_id:
             last_employee = Employee.objects.filter(
@@ -196,16 +226,21 @@ class Attendance(models.Model):
         
         super().save(*args, **kwargs)
 
-class Leave(models.Model):
+class Leave(models.Model): 
     LEAVE_TYPES = [
-        ('annual', 'Annual Leave'),
         ('sick', 'Sick Leave'),
         ('casual', 'Casual Leave'),
         ('unpaid', 'Unpaid Leave'),
-        ('maternity', 'Maternity Leave'),
-        ('paternity', 'Paternity Leave'),
     ]
-    
+
+    # Annual entitlement, in days, per leave type. 'unpaid' intentionally
+    # has no entry here - it is not quota-tracked, but every day taken as
+    # unpaid leave is treated like an absence for payroll purposes.
+    LEAVE_ANNUAL_QUOTA = {
+        'casual': 14,
+        'sick': 10,
+    }
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
@@ -227,6 +262,36 @@ class Leave(models.Model):
     
     def __str__(self):
         return f"{self.employee.full_name} - {self.leave_type} - {self.start_date} to {self.end_date}"
+
+    @property
+    def is_paid(self):
+        """Unpaid leave does not draw against a paid-leave balance and is
+        treated like an unexcused absence for payroll deduction purposes."""
+        return self.leave_type != 'unpaid'
+
+    @classmethod
+    def days_used(cls, employee, leave_type, year, exclude_pk=None):
+        """Total approved days of this leave type already used by the
+        employee within the given calendar year."""
+        qs = cls.objects.filter(
+            employee=employee,
+            leave_type=leave_type,
+            status='approved',
+            start_date__year=year,
+        )
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        return qs.aggregate(total=models.Sum('total_days'))['total'] or 0
+
+    @classmethod
+    def remaining_balance(cls, employee, leave_type, year, exclude_pk=None):
+        """Days remaining for a quota-tracked leave type, or None if the
+        leave type (e.g. unpaid) isn't quota-tracked."""
+        quota = cls.LEAVE_ANNUAL_QUOTA.get(leave_type)
+        if quota is None:
+            return None
+        used = cls.days_used(employee, leave_type, year, exclude_pk=exclude_pk)
+        return quota - used
     
     def save(self, *args, **kwargs):
         if self.start_date and self.end_date:
