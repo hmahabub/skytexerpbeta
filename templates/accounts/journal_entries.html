@@ -1,0 +1,101 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Journal Entries - SkyTex ERP{% endblock %}
+
+{% block page_title %}Journal Entries{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-1">Journal Entry Management</h5>
+                <p class="text-muted small mb-0">Manage all journal entries</p>
+            </div>
+            <div>
+                <a href="{% url 'accounts:add_journal_entry' %}" class="btn btn-gradient">
+                    <i class="fas fa-plus"></i> Add Journal Entry
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filter -->
+    <div class="filter-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label small">Journal Type</label>
+                <select name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for type_code, type_name in journal_types %}
+                    <option value="{{ type_code }}" {% if current_type == type_code %}selected{% endif %}>
+                        {{ type_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Journal Entries Table -->
+    <div class="stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Entry #</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Reference</th>
+                        <th>Created By</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td><strong>{{ entry.entry_number }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if entry.journal_type == 'sale' %}success{% elif entry.journal_type == 'purchase' %}warning{% elif entry.journal_type == 'payment' %}danger{% elif entry.journal_type == 'receipt' %}info{% else %}secondary{% endif %}">
+                                {{ entry.get_journal_type_display }}
+                            </span>
+                        </td>
+                        <td>{{ entry.entry_date }}</td>
+                        <td>{{ entry.description|truncatechars:30 }}</td>
+                        <td>{{ entry.reference|default:"-" }}</td>
+                        <td>{{ entry.created_by.username|default:"-" }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="#" class="btn btn-outline-primary" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="#" class="btn btn-outline-warning" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4">
+                            <i class="fas fa-book fa-3x text-muted mb-3 d-block"></i>
+                            <p class="text-muted">No journal entries found</p>
+                            <a href="{% url 'accounts:add_journal_entry' %}" class="btn btn-gradient btn-sm">
+                                <i class="fas fa-plus"></i> Add First Journal Entry
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

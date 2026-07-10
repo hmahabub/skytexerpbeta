@@ -1,0 +1,200 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Add Journal Entry - SkyTex ERP{% endblock %}
+
+{% block page_title %}Add Journal Entry{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="stat-card">
+                <form method="post" id="journalForm">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <h6>Please fix the following errors:</h6>
+                            <ul class="mb-0">
+                                {% for field, errors in form.errors.items %}
+                                    <li>{{ field }}: {{ errors|join:", " }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Entry Number *</label>
+                                {{ form.entry_number }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Journal Type *</label>
+                                {{ form.journal_type }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Entry Date *</label>
+                                {{ form.entry_date }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description *</label>
+                        {{ form.description }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Reference</label>
+                        {{ form.reference }}
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2 mb-3">Journal Details</h6>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="journalDetailsTable">
+                            <thead>
+                                <tr>
+                                    <th>Account</th>
+                                    <th>Debit</th>
+                                    <th>Credit</th>
+                                    <th>Notes</th>
+                                    <th>
+                                        <button type="button" class="btn btn-sm btn-success" onclick="addRow()">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="journalDetailsBody">
+                                <tr>
+                                    <td>
+                                        <select name="account_ids[]" class="form-select" required>
+                                            <option value="">Select Account</option>
+                                            {% for account in accounts %}
+                                            <option value="{{ account.id }}">{{ account.account_code }} - {{ account.account_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" name="debit_amounts[]" class="form-control debit-amount" step="0.01" min="0" value="0">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="credit_amounts[]" class="form-control credit-amount" step="0.01" min="0" value="0">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="notes[]" class="form-control" placeholder="Notes">
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr class="table-active">
+                                    <th>Totals</th>
+                                    <th id="totalDebit">0.00</th>
+                                    <th id="totalCredit">0.00</th>
+                                    <th colspan="2"></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    
+                    <div id="balanceMessage" class="alert alert-info mt-2">
+                        <i class="fas fa-info-circle"></i> Total Debit: <span id="debitDisplay">0.00</span> | Total Credit: <span id="creditDisplay">0.00</span> | Balance: <span id="balanceDisplay">0.00</span>
+                        <span id="balanceStatus" class="badge bg-success ms-2">Balanced ✓</span>
+                    </div>
+                    
+                    <div class="mt-4 border-top pt-3">
+                        <button type="submit" class="btn btn-gradient">
+                            <i class="fas fa-save"></i> Create Journal Entry
+                        </button>
+                        <a href="{% url 'accounts:journal_entries' %}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function addRow() {
+        const tbody = document.getElementById('journalDetailsBody');
+        const firstRow = tbody.querySelector('tr');
+        const newRow = firstRow.cloneNode(true);
+        
+        // Clear input values
+        newRow.querySelector('select').value = '';
+        newRow.querySelector('.debit-amount').value = '0';
+        newRow.querySelector('.credit-amount').value = '0';
+        newRow.querySelector('input[type="text"]').value = '';
+        
+        tbody.appendChild(newRow);
+        updateTotals();
+    }
+    
+    function removeRow(button) {
+        const tbody = document.getElementById('journalDetailsBody');
+        if (tbody.querySelectorAll('tr').length > 1) {
+            button.closest('tr').remove();
+            updateTotals();
+        } else {
+            alert('At least one row is required.');
+        }
+    }
+    
+    function updateTotals() {
+        let totalDebit = 0;
+        let totalCredit = 0;
+        
+        document.querySelectorAll('.debit-amount').forEach(input => {
+            totalDebit += parseFloat(input.value) || 0;
+        });
+        
+        document.querySelectorAll('.credit-amount').forEach(input => {
+            totalCredit += parseFloat(input.value) || 0;
+        });
+        
+        const balance = totalDebit - totalCredit;
+        const isBalanced = Math.abs(balance) < 0.01;
+        
+        document.getElementById('totalDebit').textContent = totalDebit.toFixed(2);
+        document.getElementById('totalCredit').textContent = totalCredit.toFixed(2);
+        document.getElementById('debitDisplay').textContent = totalDebit.toFixed(2);
+        document.getElementById('creditDisplay').textContent = totalCredit.toFixed(2);
+        document.getElementById('balanceDisplay').textContent = balance.toFixed(2);
+        
+        const statusEl = document.getElementById('balanceStatus');
+        if (isBalanced) {
+            statusEl.textContent = 'Balanced ✓';
+            statusEl.className = 'badge bg-success ms-2';
+            document.getElementById('balanceMessage').className = 'alert alert-success mt-2';
+        } else {
+            statusEl.textContent = 'Not Balanced ✗';
+            statusEl.className = 'badge bg-danger ms-2';
+            document.getElementById('balanceMessage').className = 'alert alert-danger mt-2';
+        }
+    }
+    
+    // Add event listeners to all debit and credit inputs
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('debit-amount') || e.target.classList.contains('credit-amount')) {
+            updateTotals();
+        }
+    });
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', updateTotals);
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Stock Report - SkyTex ERP{% endblock %}
+
+{% block page_title %}Stock Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Summary Cards -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="stat-card">
+                <h6 class="text-muted">Total Fabrics</h6>
+                <h3>{{ fabric_data|length }}</h3>
+                <small class="text-info">Active items</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <h6 class="text-muted">Total Trims</h6>
+                <h3>{{ trim_data|length }}</h3>
+                <small class="text-info">Active items</small>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <h6 class="text-muted">Finished Goods</h6>
+                <h3>{{ finished_data|length }}</h3>
+                <small class="text-info">Active items</small>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Fabric Stock Report -->
+    <div class="stat-card">
+        <h6 class="mb-3">Fabric Stock Summary</h6>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Color</th>
+                        <th>Stock</th>
+                        <th>Reorder Level</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fabric in fabric_data %}
+                    <tr>
+                        <td><strong>{{ fabric.code }}</strong></td>
+                        <td>{{ fabric.name }}</td>
+                        <td>{{ fabric.color }}</td>
+                        <td>{{ fabric.stock|floatformat:0 }}</td>
+                        <td>{{ fabric.reorder_level|floatformat:0 }}</td>
+                        <td>
+                            <span class="badge bg-{% if fabric.status == 'Low' %}danger{% elif fabric.status == 'Overstock' %}warning{% else %}success{% endif %}">
+                                {{ fabric.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center">No fabric data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Trim Stock Report -->
+    <div class="stat-card">
+        <h6 class="mb-3">Trim Stock Summary</h6>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Stock</th>
+                        <th>Reorder Level</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trim in trim_data %}
+                    <tr>
+                        <td><strong>{{ trim.code }}</strong></td>
+                        <td>{{ trim.name }}</td>
+                        <td>{{ trim.stock }}</td>
+                        <td>{{ trim.reorder_level }}</td>
+                        <td>
+                            <span class="badge bg-{% if trim.status == 'Low' %}danger{% elif trim.status == 'Overstock' %}warning{% else %}success{% endif %}">
+                                {{ trim.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center">No trim data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Finished Goods Stock Report -->
+    <div class="stat-card">
+        <h6 class="mb-3">Finished Goods Stock Summary</h6>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Style</th>
+                        <th>Size</th>
+                        <th>Color</th>
+                        <th>In Stock</th>
+                        <th>Dispatched</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in finished_data %}
+                    <tr>
+                        <td><strong>{{ item.sku }}</strong></td>
+                        <td>{{ item.style }}</td>
+                        <td>{{ item.size }}</td>
+                        <td>{{ item.color }}</td>
+                        <td>{{ item.in_stock }}</td>
+                        <td>{{ item.dispatched }}</td>
+                        <td>
+                            <span class="badge bg-{% if item.status == 'Low' %}danger{% else %}success{% endif %}">
+                                {{ item.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center">No finished goods data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Export Options -->
+    <div class="stat-card">
+        <h6 class="mb-3">Export Report</h6>
+        <div class="d-flex gap-2">
+            <a href="#" class="btn btn-outline-primary">
+                <i class="fas fa-file-pdf"></i> Export PDF
+            </a>
+            <a href="#" class="btn btn-outline-success">
+                <i class="fas fa-file-excel"></i> Export Excel
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Create Goods Receipt - SkyTex ERP{% endblock %}
+
+{% block page_title %}Create Goods Receipt{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="stat-card">
+                <form method="post" id="receiptForm">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            <h6>Please fix the following errors:</h6>
+                            <ul class="mb-0">
+                                {% for field, errors in form.errors.items %}
+                                    <li>{{ field }}: {{ errors|join:", " }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Receipt Number *</label>
+                                {{ form.receipt_number }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Receipt Type *</label>
+                                {{ form.receipt_type }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Supplier *</label>
+                                {{ form.supplier }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Purchase Order *</label>
+                                {{ form.purchase_order }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Invoice Number *</label>
+                                {{ form.invoice_number }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Invoice Date</label>
+                                {{ form.invoice_date }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Inspector Name</label>
+                                {{ form.inspector_name }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2 mb-3">Receipt Items</h6>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="itemsTable">
+                            <thead>
+                                <tr>
+                                    <th>Fabric</th>
+                                    <th>Trim</th>
+                                    <th>Quantity Received</th>
+                                    <th>Quantity Accepted</th>
+                                    <th>Quantity Rejected</th>
+                                    <th>Unit Price</th>
+                                    <th>
+                                        <button type="button" class="btn btn-sm btn-success" onclick="addRow()">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <tr>
+                                    <td>
+                                        <select name="fabric_ids[]" class="form-select">
+                                            <option value="">Select Fabric</option>
+                                            {% for fabric in fabrics %}
+                                            <option value="{{ fabric.id }}">{{ fabric.fabric_code }} - {{ fabric.fabric_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="trim_ids[]" class="form-select">
+                                            <option value="">Select Trim</option>
+                                            {% for trim in trims %}
+                                            <option value="{{ trim.id }}">{{ trim.trim_code }} - {{ trim.trim_name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" name="quantities_received[]" class="form-control" step="0.01" min="0">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="quantities_accepted[]" class="form-control" step="0.01" min="0">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="quantities_rejected[]" class="form-control" step="0.01" min="0" value="0">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="unit_prices[]" class="form-control" step="0.01" min="0">
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        {{ form.notes }}
+                    </div>
+                    
+                    <div class="mt-4 border-top pt-3">
+                        <button type="submit" class="btn btn-gradient">
+                            <i class="fas fa-save"></i> Create Receipt
+                        </button>
+                        <a href="{% url 'inventory:goods_receipts' %}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function addRow() {
+        const tbody = document.getElementById('itemsBody');
+        const firstRow = tbody.querySelector('tr');
+        const newRow = firstRow.cloneNode(true);
+        
+        // Clear input values
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+        
+        tbody.appendChild(newRow);
+    }
+    
+    function removeRow(button) {
+        const tbody = document.getElementById('itemsBody');
+        if (tbody.querySelectorAll('tr').length > 1) {
+            button.closest('tr').remove();
+        } else {
+            alert('At least one item row is required.');
+        }
+    }
+    
+    // Auto-generate receipt number
+    document.addEventListener('DOMContentLoaded', function() {
+        const receiptField = document.getElementById('id_receipt_number');
+        if (!receiptField.value) {
+            const today = new Date();
+            const dateStr = today.getFullYear().toString().slice(-2) + 
+                           String(today.getMonth() + 1).padStart(2, '0') + 
+                           String(today.getDate()).padStart(2, '0');
+            const count = Math.floor(Math.random() * 1000);
+            receiptField.value = `GR-${dateStr}-${String(count).padStart(4, '0')}`;
+        }
+    });
+</script>
+{% endblock %}

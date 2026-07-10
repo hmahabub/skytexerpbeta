@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import Sum, Count, Q
 from datetime import datetime, timedelta
 from apps.hr.models import Employee, Attendance, Payroll, ProductionOutput
-from apps.accounts.models import Style, SalesInvoice, SupplierBill
+from apps.accounts.models import Style, SalesInvoice
 from apps.inventory.models import Fabric, FabricRoll, Trim
 
 @login_required
@@ -42,8 +42,8 @@ def dashboard(request):
         status='paid'
     ).aggregate(total=Sum('amount'))['total'] or 0
     
-    context['pending_payments'] = SupplierBill.objects.filter(
-        status='unpaid'
+    context['pending_payments'] = SalesInvoice.objects.filter(
+        status='pending'
     ).aggregate(total=Sum('amount'))['total'] or 0
     
     # Inventory Statistics

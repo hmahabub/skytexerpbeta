@@ -1,0 +1,119 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Trim Management - SkyTex ERP{% endblock %}
+
+{% block page_title %}Trim Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-1">Trim Management</h5>
+                <p class="text-muted small mb-0">Manage all trim items and stock levels</p>
+            </div>
+            <div>
+                <a href="{% url 'inventory:add_trim' %}" class="btn btn-gradient">
+                    <i class="fas fa-plus"></i> Add Trim
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label small">Search</label>
+                <input type="text" name="search" class="form-control" placeholder="Search by code, name..." value="{{ search }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Trim Type</label>
+                <select name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for type_code, type_name in trim_types %}
+                    <option value="{{ type_code }}" {% if current_type == type_code %}selected{% endif %}>
+                        {{ type_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <a href="{% url 'inventory:trim_list' %}" class="btn btn-outline-secondary w-100">
+                    <i class="fas fa-undo"></i> Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Trim Table -->
+    <div class="stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Color</th>
+                        <th>Size</th>
+                        <th>Stock</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trim in trims %}
+                    <tr>
+                        <td><strong>{{ trim.trim_code }}</strong></td>
+                        <td>{{ trim.trim_name }}</td>
+                        <td><span class="badge bg-info">{{ trim.get_trim_type_display }}</span></td>
+                        <td>{{ trim.color|default:"-" }}</td>
+                        <td>{{ trim.size|default:"-" }}</td>
+                        <td>
+                            <strong>{{ trim.current_stock }}</strong>
+                            <small class="text-muted">{{ trim.unit }}</small>
+                        </td>
+                        <td>
+                            {% if trim.is_low_stock %}
+                                <span class="badge bg-danger">Low Stock</span>
+                            {% elif trim.stock_status == 'overstock' %}
+                                <span class="badge bg-warning">Overstock</span>
+                            {% else %}
+                                <span class="badge bg-success">Normal</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="#" class="btn btn-outline-primary" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="#" class="btn btn-outline-warning" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">
+                            <i class="fas fa-thumbtack fa-3x text-muted mb-3 d-block"></i>
+                            <p class="text-muted">No trims found</p>
+                            <a href="{% url 'inventory:add_trim' %}" class="btn btn-gradient btn-sm">
+                                <i class="fas fa-plus"></i> Add First Trim
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

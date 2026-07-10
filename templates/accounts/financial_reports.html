@@ -1,0 +1,96 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Financial Reports - SkyTex ERP{% endblock %}
+
+{% block page_title %}Financial Reports{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Income Statement -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h5 class="mb-3">Income Statement</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <tr>
+                            <td><strong>Revenue</strong></td>
+                            <td class="text-end"><strong>${{ total_revenue|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Cost of Goods Sold</td>
+                            <td class="text-end">${{ total_cogs|floatformat:2 }}</td>
+                        </tr>
+                        <tr class="border-top">
+                            <td><strong>Gross Profit</strong></td>
+                            <td class="text-end">
+                                <strong class="{% if gross_profit > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ gross_profit|floatformat:2 }}
+                                </strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Gross Margin</td>
+                            <td class="text-end">
+                                <span class="badge bg-{% if gross_margin > 30 %}success{% elif gross_margin > 15 %}warning{% else %}danger{% endif %}">
+                                    {{ gross_margin|floatformat:1 }}%
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Balance Sheet -->
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h5 class="mb-3">Balance Sheet</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <tr>
+                            <td><strong>Assets</strong></td>
+                            <td class="text-end"><strong>${{ total_assets|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Liabilities</strong></td>
+                            <td class="text-end"><strong>${{ total_liabilities|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Equity</strong></td>
+                            <td class="text-end"><strong>${{ total_equity|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr class="border-top">
+                            <td><strong>Total L + E</strong></td>
+                            <td class="text-end">
+                                <strong>${{ total_liabilities|add:total_equity|floatformat:2 }}</strong>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="stat-card">
+                <h6 class="mb-3">Report Generation</h6>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="#" class="btn btn-outline-primary">
+                        <i class="fas fa-file-pdf"></i> Export as PDF
+                    </a>
+                    <a href="#" class="btn btn-outline-success">
+                        <i class="fas fa-file-excel"></i> Export as Excel
+                    </a>
+                    <a href="#" class="btn btn-outline-danger">
+                        <i class="fas fa-print"></i> Print Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

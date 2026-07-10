@@ -1,0 +1,98 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Stock Adjustments - SkyTex ERP{% endblock %}
+
+{% block page_title %}Stock Adjustments{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-1">Stock Adjustments</h5>
+                <p class="text-muted small mb-0">Manage inventory adjustments and corrections</p>
+            </div>
+            <div>
+                <a href="{% url 'inventory:add_stock_adjustment' %}" class="btn btn-gradient">
+                    <i class="fas fa-plus"></i> New Adjustment
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adjustments Table -->
+    <div class="stat-card">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Adjustment #</th>
+                        <th>Type</th>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Date</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for adjustment in adjustments %}
+                    <tr>
+                        <td><strong>{{ adjustment.adjustment_number }}</strong></td>
+                        <td>
+                            <span class="badge bg-{% if adjustment.adjustment_type == 'damage' %}danger{% elif adjustment.adjustment_type == 'expired' %}warning{% elif adjustment.adjustment_type == 'recount' %}info{% else %}secondary{% endif %}">
+                                {{ adjustment.get_adjustment_type_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if adjustment.fabric %}
+                                {{ adjustment.fabric.fabric_name }}
+                            {% elif adjustment.trim %}
+                                {{ adjustment.trim.trim_name }}
+                            {% elif adjustment.finished_goods %}
+                                {{ adjustment.finished_goods.sku_code }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="{% if adjustment.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ adjustment.quantity|floatformat:0 }}
+                            </span>
+                        </td>
+                        <td>{{ adjustment.adjustment_date }}</td>
+                        <td>{{ adjustment.reason|truncatechars:30 }}</td>
+                        <td>
+                            {% if adjustment.approved_by %}
+                                <span class="badge bg-success">Approved</span>
+                            {% else %}
+                                <span class="badge bg-warning">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="#" class="btn btn-outline-primary" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">
+                            <i class="fas fa-edit fa-3x text-muted mb-3 d-block"></i>
+                            <p class="text-muted">No stock adjustments found</p>
+                            <a href="{% url 'inventory:add_stock_adjustment' %}" class="btn btn-gradient btn-sm">
+                                <i class="fas fa-plus"></i> Create First Adjustment
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
